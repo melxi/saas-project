@@ -48,15 +48,36 @@ passport.use(new localStrategy({
   })
 }))
 
+passport.use('signup-local', new localStrategy({
+  usernameField: "email",
+  passwordField: "password"
+}, (email, password, next) => {
+  User.findOne({
+    email: email
+  }, (err, user) => {
+    if (err) return next(err)
+    if (user) return next({message: "User already exists"})
+
+    let newUser = new User({
+      email: email,
+      passwordHash: bcrypt.hashSync(password, 10)
+    })
+
+    newUser.save(err => {
+      next(err, newUser)
+    })
+  })
+}))
+
 passport.serializeUser((user, next) => {
   next(null, user._id)
 })
 
 passport.deserializeUser(function(id, next) {
   User.findById(id, function(err, user) {
-      next(err, user);
-  });
-});
+      next(err, user)
+  })
+})
 
 app.get('/', (req, res) => {
   res.render('index', {title: 'SaaS Project'})
@@ -77,26 +98,12 @@ app.get('/login-page', (req, res, next) => {
   res.render('login-page')
 })
 
-app.post('/signup', (req, res, next) => {
-  User.findOne({
-    email: req.body.email
-  }, (err, user) => {
-    if (err) return next(err)
-    if (user) return next({ message: 'User already exists' })
-
-    let newUser = new User({
-      email: req.body.email,
-      passwordHash: bcrypt.hashSync(req.body.password, 10)
-    })
-  
-    newUser.save(err => {
-      if (err) return next(err)
-      res.redirect('/main')
-    })
-  })
-})
-
-let sawWalktrough;
+app.post('/signup',
+  passport.authenticate('signup-local', { failureRedirect: '/' }),
+  (req, res) => {
+    res.redirect('/main')
+  }
+)
 
 app.get('/walktrough', (req, res, next) => {
   req.session.sawWalktrough = true
