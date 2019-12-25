@@ -4,6 +4,9 @@ const path = require('path')
 const app = express()
 const logger = require('morgan')
 const bcrypt = require('bcrypt')
+const expressSession = require('express-session')
+const passport = require('passport')
+const localStrategy = require('passport-local')
 const config = require('./utils/config')
 const User = require('./models/user')
 
@@ -22,6 +25,38 @@ app.use(logger('dev'))
 app.use(express.json())
 app.use(express.urlencoded({extended: false}))
 app.use(express.static(path.join(__dirname, 'public')))
+app.use(expressSession({
+  secret: config.SECRET,
+  resave: true,
+  saveUninitialized: true
+}))
+app.use(passport.initialize())
+app.use(passport.session())
+
+passport.use(new localStrategy({
+  usernameField: "email",
+  passwordField: "password"
+}, (email, password, next) => {
+  User.findOne({
+    email: email
+  }, (err, user) => {
+    if (err) return next(err)
+    if (!user || !bcrypt.compareSync(password, user.passwordHash)) {
+      return next({message: "Email or password incorrect"})
+    }
+    next(null, user)
+  })
+}))
+
+passport.serializeUser((user, next) => {
+  next(null, user._id)
+})
+
+passport.deserializeUser(function(id, next) {
+  User.findById(id, function(err, user) {
+      next(err, user);
+  });
+});
 
 app.get('/', (req, res) => {
   res.render('index', {title: 'SaaS Project'})
@@ -30,6 +65,13 @@ app.get('/', (req, res) => {
 app.get('/main', (req, res, next) => {
   res.render('main')
 })
+
+app.post('/login', 
+  passport.authenticate('local', { failureRedirect: '/login-page'}),
+  (req, res) => {
+    res.redirect('/main')
+  }
+)
 
 app.get('/login-page', (req, res, next) => {
   res.render('login-page')
@@ -54,7 +96,16 @@ app.post('/signup', (req, res, next) => {
   })
 })
 
+let sawWalktrough;
 
+app.get('/walktrough', (req, res, next) => {
+  req.session.sawWalktrough = true
+  res.end()
+})
+
+app.get('/complicated', (req, res, next) => {
+  console.log(req.session.sawWalktrough)
+})
 
 app.use((err, req, res, next) => {
   res.locals.message = err.message
